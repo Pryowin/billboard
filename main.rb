@@ -38,8 +38,9 @@ end
 
 class Billboard_Page
 
+  BASE_URL = "https://www.billboard.com/charts/hot-100/"
   def initialize(date)
-    url = "https://www.billboard.com/charts/hot-100/#{date}"
+    url = "#{BASE_URL}#{date}"
     begin
       html =open(url, "User-Agent" => "OPERA")
     rescue OpenURI::HTTPError => error
@@ -70,7 +71,7 @@ class Billboard_Page
     pos_text = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"]
     pos = pos - 1
     pos = 0 if pos < 0
-    pos = 9 if pos > 9
+    pos = pos_text.length if pos > pos_text.length
     return "div[class=\"chart-number-#{pos_text[pos]}__#{attribute}\"]"
   end
 
@@ -78,37 +79,47 @@ end
 
 
 def get_next_chart_date(last_date)
-  (Date.parse(last_date) + 7).to_s
+  (Date.parse(last_date) + DAYS_IN_WEEK).to_s
 end
 
-db = Database.new("number_ones")
+END_DATE = "2019-06-15"
+DAYS_IN_WEEK = 7
 
-date = "2015-06-02"
-while date < "2019-06-15"
-  error_count = 0
-  ok = false
-  while error_count < 10 && !ok
+db_name = "test"
+db_name = ARGV[1] if ARGV.length > 1
 
-    bp = Billboard_Page.new(date)
-    if bp.status != "OK"
-      error_count += 1
-      sleep 5
-    else
-      ok= true
-    end
-  end
+db = Database.new(db_name)
 
-  if ok
-      title = bp.get_title
-      artist = bp.get_artist
-      bp = nil
-      puts "Number 1 on #{date} was #{title} by #{artist}"
-      db.add_record(date,title,artist)
-      date = get_next_chart_date(date)
+date =ARGV[0]
+if ARGV.length < 1
+  puts "Error: starting date must be specified"
+  exit(false)
+end
+begin
+  Date.parse(date)
+rescue ArgumentError
+  puts "Error: #{date} is not a valid date"
+  exit(false)
+end
+
+while date < END_DATE
+
+  bp = Billboard_Page.new(date)
+
+  if bp.status == "OK"
+    title = bp.get_title
+    artist = bp.get_artist
+    bp = nil
+    puts "Number 1 on #{date} was #{title} by #{artist}"
+    db.add_record(date,title,artist)
+    date = get_next_chart_date(date)
+  else
+    puts "Error retrieving record for #{date}"
+    exit false
   end
 
   sleep 2
 end
 
-
 db.close
+exit(true)
